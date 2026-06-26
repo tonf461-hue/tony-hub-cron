@@ -8,8 +8,8 @@ name: opportunity-refresh
 
 # Schedule-only ping (refreshes the daily focus/opportunity selection server-side).
 on:
-  # schedule:
-  #   - cron: '0 1 * * *'   # ENABLE after TAI_CRON_SECRET set
+  schedule:
+    - cron: '0 1 * * *'
   workflow_dispatch: {}
 
 concurrency:
