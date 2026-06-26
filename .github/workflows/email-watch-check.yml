@@ -1,9 +1,15 @@
 name: email-watch-check
 
+# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
+#   value that authenticates against heytai.app (copy from the private repo's
+#   GitHub secret, or from Vercel project tai-preview env). The private-repo
+#   twin keeps running on schedule until then — no coverage gap. To activate:
+#   set the secret, then uncomment the `schedule:` block below.
+
 # Schedule-only ping to a token-gated endpoint (full email-watch matcher).
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  # schedule:
+  #   - cron: '*/30 * * * *'   # ENABLE after TAI_CRON_SECRET set
   workflow_dispatch: {}
 
 env:

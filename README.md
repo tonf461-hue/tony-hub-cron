@@ -25,6 +25,25 @@ and are never printed to logs.
 
 Variable: `TAI_CRON_URL` (base URL override; defaults to production).
 
+## Status
+
+**Active (scheduled, verified):** the 8 bridge/cognition workflows — `brain-cadence-*`,
+`brain-focus-cache-refresh`, `brain-morning-brief`, `gcal-cloud-sync`, `brain-cloud-ingest`.
+Their `TBONE_BRIDGE_TOKEN` / `COGNITION_BRAIN_TOKEN` secrets are set and validated (HTTP 200).
+
+**Pending one secret (schedule commented, dispatch-only):** the 5 `TAI_CRON_SECRET`
+workflows — `cubs-pregame-push`, `email-watch-fast`, `email-watch-check`,
+`opportunity-refresh`, `gmail-watch-renew`. The correct `TAI_CRON_SECRET` is stored as a
+Vercel *sensitive* env var and is not machine-readable, so it must be set by hand:
+
+```
+gh secret set TAI_CRON_SECRET --repo tonf461-hue/tony-hub-cron
+# paste the value used by the private repo's TAI_CRON_SECRET secret
+```
+
+Then uncomment the `schedule:` block in each of those 5 files. Until then, their private-repo
+twins keep running on schedule, so nothing stops working.
+
 ## Rollback
 
 Each workflow here has an identical-behavior twin in the private hub repo whose

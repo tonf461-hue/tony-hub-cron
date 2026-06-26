@@ -1,9 +1,15 @@
 name: gmail-watch-renew
 
+# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
+#   value that authenticates against heytai.app (copy from the private repo's
+#   GitHub secret, or from Vercel project tai-preview env). The private-repo
+#   twin keeps running on schedule until then — no coverage gap. To activate:
+#   set the secret, then uncomment the `schedule:` block below.
+
 # Schedule-only ping. Renews a Gmail Pub/Sub push watch every 6 days (expires at 7).
 on:
-  schedule:
-    - cron: '0 6 */6 * *'
+  # schedule:
+  #   - cron: '0 6 */6 * *'   # ENABLE after TAI_CRON_SECRET set
   workflow_dispatch: {}
 
 jobs:
