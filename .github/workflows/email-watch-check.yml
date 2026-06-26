@@ -8,8 +8,8 @@ name: email-watch-check
 
 # Schedule-only ping to a token-gated endpoint (full email-watch matcher).
 on:
-  # schedule:
-  #   - cron: '*/30 * * * *'   # ENABLE after TAI_CRON_SECRET set
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 env:
