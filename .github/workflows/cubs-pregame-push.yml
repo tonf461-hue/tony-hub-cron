@@ -11,8 +11,8 @@ name: cubs-pregame-push
 # deduplicates by game). No app code or data lives here.
 
 on:
-  # schedule:
-  #   - cron: '*/30 * * * *'   # ENABLE after TAI_CRON_SECRET set
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 concurrency:
