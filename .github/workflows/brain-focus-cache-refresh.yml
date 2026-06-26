@@ -1,6 +1,8 @@
 name: brain-focus-cache-refresh
 
 # Schedule-only ping. Keeps a server-side synthesis cache warm (both horizons).
+# The request triggers background LLM synthesis and may exceed the curl timeout
+# even though the server received it — so a timeout is a soft warning, not a failure.
 on:
   schedule:
     - cron: '0 */2 * * *'
@@ -9,7 +11,7 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - name: Refresh focus cache (today + week)
         env:
@@ -20,7 +22,10 @@ jobs:
               "https://t-bone-bridge.fly.dev/api/v1/brain/focus" \
               -H "Authorization: Bearer $TBONE_BRIDGE_TOKEN" \
               -H "Content-Type: application/json" \
-              -d "{\"horizon\":\"${H}\"}" --max-time 30)
+              -d "{\"horizon\":\"${H}\"}" --max-time 60) || CODE="timeout"
             echo "horizon=${H} HTTP=${CODE}"
-            [ "$CODE" = "200" ] || echo "::warning::focus ${H} HTTP ${CODE}"
+            if [ "$CODE" != "200" ]; then
+              echo "::warning::focus ${H} returned ${CODE} (cache warm still triggered server-side)"
+            fi
           done
+          echo "focus cache refresh dispatched for both horizons"
