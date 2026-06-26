@@ -8,8 +8,8 @@ name: gmail-watch-renew
 
 # Schedule-only ping. Renews a Gmail Pub/Sub push watch every 6 days (expires at 7).
 on:
-  # schedule:
-  #   - cron: '0 6 */6 * *'   # ENABLE after TAI_CRON_SECRET set
+  schedule:
+    - cron: '0 6 */6 * *'
   workflow_dispatch: {}
 
 jobs:
