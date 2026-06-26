@@ -1,0 +1,25 @@
+name: gmail-watch-renew
+
+# Schedule-only ping. Renews a Gmail Pub/Sub push watch every 6 days (expires at 7).
+on:
+  schedule:
+    - cron: '0 6 */6 * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: POST gmail-push/renew
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+          TAI_APP_URL: ${{ secrets.TAI_APP_URL }}
+        run: |
+          set -euo pipefail
+          BASE="${TAI_APP_URL:-https://heytai.app}"
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            "${BASE}/api/webhooks/gmail-push/renew")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0) if d.get('ok') else (print('ERROR:', d.get('error')) or sys.exit(1))"

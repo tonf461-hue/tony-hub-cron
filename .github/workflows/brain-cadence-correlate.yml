@@ -1,0 +1,23 @@
+name: brain-cadence-correlate
+
+# Schedule-only ping (cross-domain correlation pass; server decides if anything qualifies).
+on:
+  schedule:
+    - cron: '0 2,6,10,14,18,22 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: POST brain/correlate
+        env:
+          TBONE_BRIDGE_TOKEN: ${{ secrets.TBONE_BRIDGE_TOKEN }}
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "https://t-bone-bridge.fly.dev/api/v1/brain/correlate" \
+            -H "Authorization: Bearer $TBONE_BRIDGE_TOKEN" \
+            -H "Content-Type: application/json" -d '{}' --max-time 90)
+          echo "HTTP: $CODE"
+          [ "$CODE" = "200" ] || echo "::warning::HTTP $CODE"

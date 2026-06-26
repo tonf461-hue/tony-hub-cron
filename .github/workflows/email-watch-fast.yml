@@ -1,0 +1,29 @@
+name: email-watch-fast
+
+# Schedule-only ping to a token-gated endpoint (fast-lane subset).
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST email-watch-check (fast lane)
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL:-https://heytai.app}"
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 60 \
+            "${URL}/api/cron/email-watch-check?fast_only=true")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'checked={d.get(\"checked\",0)} triggered={d.get(\"triggered\",0)} pushSent={d.get(\"pushSent\",0)}')"

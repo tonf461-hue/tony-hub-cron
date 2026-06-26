@@ -1,0 +1,29 @@
+name: opportunity-refresh
+
+# Schedule-only ping (refreshes the daily focus/opportunity selection server-side).
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: opportunity-refresh
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST opportunity-refresh
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            "https://tai-preview-liart.vercel.app/api/cron/opportunity-refresh")
+          echo "$RESPONSE" | python3 -m json.tool
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }

@@ -1,0 +1,34 @@
+name: email-watch-check
+
+# Schedule-only ping to a token-gated endpoint (full email-watch matcher).
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+
+concurrency:
+  group: email-watch-check
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST email-watch-check
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL:-https://heytai.app}"
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 60 \
+            "${URL}/api/cron/email-watch-check")
+          echo "$RESPONSE" | python3 -m json.tool
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }

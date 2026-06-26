@@ -1,0 +1,27 @@
+name: gcal-cloud-sync
+
+# Schedule-only ping. The target endpoint pulls upcoming calendar events into the
+# cloud store and refreshes the calendar card. All logic + credentials live server-side.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST calendar/cloud-sync
+        env:
+          TBONE_BRIDGE_TOKEN: ${{ secrets.TBONE_BRIDGE_TOKEN }}
+        run: |
+          set -euo pipefail
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TBONE_BRIDGE_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            "https://t-bone-bridge.fly.dev/api/v1/calendar/cloud-sync")
+          echo "$RESPONSE" | python3 -m json.tool
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }

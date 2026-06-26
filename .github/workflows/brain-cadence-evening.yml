@@ -1,0 +1,23 @@
+name: brain-cadence-evening
+
+# Schedule-only ping (evening wrap; no-op server-side if nothing is open).
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: POST brain/evening-wrap
+        env:
+          TBONE_BRIDGE_TOKEN: ${{ secrets.TBONE_BRIDGE_TOKEN }}
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "https://t-bone-bridge.fly.dev/api/v1/brain/evening-wrap" \
+            -H "Authorization: Bearer $TBONE_BRIDGE_TOKEN" \
+            -H "Content-Type: application/json" -d '{}' --max-time 90)
+          echo "HTTP: $CODE"
+          [ "$CODE" = "200" ] || echo "::warning::HTTP $CODE"

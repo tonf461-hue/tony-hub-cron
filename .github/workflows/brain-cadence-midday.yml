@@ -1,0 +1,23 @@
+name: brain-cadence-midday
+
+# Schedule-only ping (midday pulse; silent server-side if nothing qualifies).
+on:
+  schedule:
+    - cron: '30 17 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: POST brain/pulse-check
+        env:
+          TBONE_BRIDGE_TOKEN: ${{ secrets.TBONE_BRIDGE_TOKEN }}
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "https://t-bone-bridge.fly.dev/api/v1/brain/pulse-check" \
+            -H "Authorization: Bearer $TBONE_BRIDGE_TOKEN" \
+            -H "Content-Type: application/json" -d '{}' --max-time 60)
+          echo "HTTP: $CODE"
+          [ "$CODE" = "200" ] || echo "::warning::HTTP $CODE"
