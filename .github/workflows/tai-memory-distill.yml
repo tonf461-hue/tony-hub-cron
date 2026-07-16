@@ -1,0 +1,52 @@
+name: Tai Memory Distill
+
+# Reliable driver for Tai's nightly memory pipeline (seed + ring-3 distill).
+#
+# WHY THIS EXISTS: /api/cron/tai-memory-distill was registered ONLY as a
+# Vercel-native cron. Vercel-native crons authenticate with the auto-injected
+# CRON_SECRET — which is not set on that project — so the job has 401'd on
+# every scheduled run since it shipped, and the durable-memory store sat empty.
+# Every WORKING Tai cron is driven by a GitHub Actions twin that sends
+# `Authorization: Bearer ${TAI_CRON_SECRET}` explicitly. This is that twin,
+# copied from the proven pattern (tai-dining-sync et al).
+#
+# What the endpoint does per run (idempotent):
+#   1. Seeds the canonical memory facts (reinforce-on-conflict, supersede pass
+#      voids stale seed wordings only — never a correction).
+#   2. Distills durable-fact candidates from the last 24h of conversation,
+#      re-verified against the shared brain before storage.
+
+on:
+  schedule:
+    - cron: '10 9 * * *'   # nightly ~4:10 AM CT
+  workflow_dispatch: {}
+
+jobs:
+  memory-distill:
+    name: Seed + distill Tai durable memory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Run memory distill
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL:-https://heytai.app}"
+          echo "→ POSTing to ${URL}/api/cron/tai-memory-distill …"
+          RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 300 \
+            "${URL}/api/cron/tai-memory-distill")
+          echo "Response:"
+          echo "$RESPONSE" | python3 -m json.tool
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          if [ "$OK" != "True" ] && [ "$OK" != "true" ]; then
+            echo "ERROR: tai-memory-distill returned ok=false" >&2
+            exit 1
+          fi
+          SEEDED=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('seeded',0))")
+          echo "✓ Seeds upserted: ${SEEDED}"
