@@ -1,0 +1,46 @@
+name: tai-dining-intel
+
+# Twin for Tai's /api/cron/dining-intel (Vercel-native cron 401s — see
+# tai-dining-sync.yml header). Runs sync-dining FIRST so a same-day booking is
+# promoted before the dossier pass, then pre-bakes the Restaurant Intelligence
+# PDF for any reservation happening today. 13:50 UTC = 8:50 AM CT, ahead of the
+# lunch window.
+on:
+  schedule:
+    - cron: '50 13 * * *'
+  workflow_dispatch: {}
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+
+concurrency:
+  group: tai-dining-intel
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: POST sync-dining then dining-intel
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL:-https://heytai.app}"
+
+          SYNC=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            "${URL}/api/cron/sync-dining")
+          echo "$SYNC" | python3 -m json.tool
+
+          INTEL=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 300 \
+            "${URL}/api/cron/dining-intel")
+          echo "$INTEL" | python3 -m json.tool
+          OK=$(echo "$INTEL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }
