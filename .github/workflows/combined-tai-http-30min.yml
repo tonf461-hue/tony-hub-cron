@@ -1,0 +1,159 @@
+name: combined-tai-http-30min
+
+# Cost lever (2026-07-31 CRON-30MIN-CONSOLIDATION):
+# Merges 4 independent */30 pure-curl pings into ONE runner boot.
+#   was: email-watch-check · email-watch-fast · cubs-pregame-push · tai-proactive-refresh
+#   now: this workflow only (4 → 1 billed job-instance per cycle)
+#
+# Cadence preserved: still */30. Order is intentional:
+#   1. cubs-pregame-push FIRST — 10-min window (55–65 min before first pitch);
+#      minimize delay after the schedule fires.
+#   2. email-watch-check (full) — covers all active watches including
+#      check_faster=true. The separate email-watch-fast lane was a pure
+#      subset call at the SAME 30-min cadence (historically */10 vs */20);
+#      re-running it at equal cadence added zero latency win and one
+#      extra boot. Dropped from the combined path intentionally.
+#   3. proactive-refresh — independent spine scan + reach-out gate.
+#
+# Target URL: https://tai-web.fly.dev (Fly production DONE gate).
+# Deliberately does NOT honor vars.TAI_CRON_URL while that var still points
+# at lagging heytai.app (legacy Vercel; observed 2026-07-31: 0.786.206 vs
+# Fly 0.786.376). Cockpit follow-up: retarget TAI_CRON_URL fleet-wide.
+#
+# Auth / idempotency / trigger conditions: unchanged. Same Bearer secret,
+# same paths, same query (no fast_only — full check is a superset).
+# continue-on-error per step so one soft failure does not skip the others
+# (matches the prior independent-workflow failure isolation).
+#
+# Originals kept as workflow_dispatch-only manual fallbacks; their
+# schedule: blocks are removed. To revert: restore each original schedule
+# and delete this file's schedule (or this file).
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'Step: cubs|email-watch|proactive|all'
+        required: false
+        default: 'all'
+
+concurrency:
+  group: combined-tai-http-30min
+  cancel-in-progress: false
+
+env:
+  # Fly production — see header comment. Do not silently re-point to heytai.
+  TAI_CRON_URL: https://tai-web.fly.dev
+
+jobs:
+  ping:
+    name: Tai HTTP pings (cubs · email-watch · proactive)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Require TAI_CRON_SECRET
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAI_CRON_SECRET:-}" ]; then
+            echo "::error::TAI_CRON_SECRET missing on tony-hub-cron. Stop — do not invent a credential."
+            exit 1
+          fi
+
+      # ── 1. Cubs pregame (time-window sensitive — first) ───────────────────
+      - name: POST cubs-pregame-push
+        if: github.event_name == 'schedule' || github.event.inputs.run == 'all' || github.event.inputs.run == 'cubs'
+        continue-on-error: true
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL}"
+          RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
+            "${URL}/api/cron/cubs-pregame-push" \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 30 || true)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "HTTP: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::cubs-pregame-push returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+          OK=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ok', True))" 2>/dev/null || echo "parse_fail")
+          if [ "$OK" = "False" ] || [ "$OK" = "false" ] || [ "$OK" = "parse_fail" ]; then
+            echo "::warning::cubs-pregame-push body reports failure"
+            exit 1
+          fi
+          SKIPPED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('skipped',''))" 2>/dev/null || echo "")
+          if [ -n "$SKIPPED" ]; then
+            echo "skipped: $SKIPPED (legitimate no-op tick)"
+          else
+            SENT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sent',0))" 2>/dev/null || echo "?")
+            OPP=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('opponent',''))" 2>/dev/null || echo "")
+            echo "✓ pregame tick ok: opponent=$OPP sent=$SENT"
+          fi
+
+      # ── 2. Email-watch full matcher (superset of former fast lane) ────────
+      - name: POST email-watch-check
+        if: github.event_name == 'schedule' || github.event.inputs.run == 'all' || github.event.inputs.run == 'email-watch'
+        continue-on-error: true
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL}"
+          echo "→ POSTing to ${URL}/api/cron/email-watch-check …"
+          RESPONSE=$(curl -sf -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 60 \
+            "${URL}/api/cron/email-watch-check")
+          echo "$RESPONSE" | python3 -m json.tool
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }
+          echo "$RESPONSE" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          print(f\"checked={d.get('checked',0)} triggered={d.get('triggered',0)} pushSent={d.get('pushSent',0)} smsSent={d.get('smsSent',0)}\")
+          "
+
+      # ── 3. Proactive refresh + reach-out gate ─────────────────────────────
+      - name: POST proactive-refresh
+        if: github.event_name == 'schedule' || github.event.inputs.run == 'all' || github.event.inputs.run == 'proactive'
+        continue-on-error: true
+        env:
+          TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${TAI_CRON_URL}"
+          echo "→ POSTing to ${URL}/api/cron/proactive-refresh …"
+          RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            "${URL}/api/cron/proactive-refresh")
+          # Public logs: counts + reason codes only — no item content.
+          echo "$RESPONSE" | python3 -c "
+          import sys, json
+          r = json.load(sys.stdin)
+          print('ok:', r.get('ok'))
+          print('itemCount:', r.get('itemCount'))
+          print('suppressed:', r.get('suppressed'))
+          print('bySeverity:', r.get('bySeverity'))
+          print('push:', r.get('push'))
+          ro = r.get('reachOut') or {}
+          print('reachOut.sent:', ro.get('sent'), '| reason:', ro.get('reason'))
+          "
+          OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
+          if [ "$OK" != "True" ] && [ "$OK" != "true" ]; then
+            echo "ERROR: proactive-refresh returned ok=false" >&2
+            exit 1
+          fi

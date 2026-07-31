@@ -1,19 +1,23 @@
 name: email-watch-fast
 
-# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
-#   value that authenticates against heytai.app (copy from the private repo's
-#   GitHub secret, or from Vercel project tai-preview env). The private-repo
-#   twin keeps running on schedule until then — no coverage gap. To activate:
-#   set the secret, then uncomment the `schedule:` block below.
+# Schedule REMOVED 2026-07-31 (CRON-30MIN-CONSOLIDATION).
+#
+# Why not kept in the combined workflow:
+#   fast_only=true only filters watches with check_faster=true. The full
+#   email-watch-check (no query) already includes those rows. The fast lane
+#   only paid for itself when it ran MORE often than the full check
+#   (historical: fast */10 vs full */20). Both had been cut to */30, so a
+#   second boot every half-hour was pure waste at zero latency win.
+#
+# workflow_dispatch retained for one-off manual isolation tests.
+# To restore a true fast lane: schedule this more often than the full check
+# (e.g. */10) — do not re-add at the same cadence as the full matcher.
 
-# Schedule-only ping to a token-gated endpoint (fast-lane subset).
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 env:
-  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+  TAI_CRON_URL: https://tai-web.fly.dev
 
 jobs:
   ping:
@@ -25,7 +29,7 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
-          URL="${TAI_CRON_URL:-https://heytai.app}"
+          URL="${TAI_CRON_URL:-https://tai-web.fly.dev}"
           RESPONSE=$(curl -sf -X POST \
             -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
             -H "Content-Type: application/json" \
