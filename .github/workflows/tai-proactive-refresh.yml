@@ -21,6 +21,9 @@ name: Tai Proactive Refresh
 # Log hygiene: this is a PUBLIC repo — only counts and reason codes are
 # printed, never item titles or content.
 
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+
 on:
   schedule:
     - cron: '*/30 * * * *'
