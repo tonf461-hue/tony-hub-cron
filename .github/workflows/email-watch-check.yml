@@ -1,19 +1,17 @@
 name: email-watch-check
 
-# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
-#   value that authenticates against heytai.app (copy from the private repo's
-#   GitHub secret, or from Vercel project tai-preview env). The private-repo
-#   twin keeps running on schedule until then — no coverage gap. To activate:
-#   set the secret, then uncomment the `schedule:` block below.
+# Schedule OWNED by combined-tai-http-30min.yml (2026-07-31 consolidation).
+# This file is workflow_dispatch-only — manual fallback / isolation debug.
+# To revert: re-add `schedule: - cron: '*/30 * * * *'` and remove the
+# email-watch step from combined-tai-http-30min.yml.
 
 # Schedule-only ping to a token-gated endpoint (full email-watch matcher).
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 env:
-  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
+  # Prefer Fly production (VERCEL-EXIT). Repo var may still lag on heytai.
+  TAI_CRON_URL: https://tai-web.fly.dev
 
 concurrency:
   group: email-watch-check
@@ -29,7 +27,7 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
-          URL="${TAI_CRON_URL:-https://heytai.app}"
+          URL="${TAI_CRON_URL:-https://tai-web.fly.dev}"
           RESPONSE=$(curl -sf -X POST \
             -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
             -H "Content-Type: application/json" \

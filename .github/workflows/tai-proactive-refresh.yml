@@ -1,32 +1,19 @@
 name: Tai Proactive Refresh
 
-# Driver for Tai's proactive intelligence engine (/api/cron/proactive-refresh).
+# Schedule OWNED by combined-tai-http-30min.yml (2026-07-31 consolidation).
+# This file is workflow_dispatch-only — manual fallback / isolation debug.
+# To revert: re-add `schedule: - cron: '*/30 * * * *'` and remove the
+# proactive step from combined-tai-http-30min.yml.
 #
-# WHY THIS EXISTS: the route was registered ONLY as a Vercel-native cron.
-# Vercel-native crons authenticate with the auto-injected CRON_SECRET — which
-# is not set on that project — so the job has 401'd on every scheduled run
-# since it shipped, and the proactive alerts + reach-out push lane never ran.
-# Every WORKING Tai cron is driven by a GitHub Actions twin that sends
-# `Authorization: Bearer ${TAI_CRON_SECRET}` explicitly. This is that twin,
-# copied from the proven pattern (tai-memory-distill et al).
-#
-# What the endpoint does per run (idempotent, no LLM):
-#   1. Scans live spine rows (bills, court, deadlines, refills, appointments).
-#   2. Upserts the ranked alert items; clears its own stale rows; never touches
-#      dismissed/resolved ones.
-#   3. Reach-out discipline: at most ONE push, only for a critical item, with
-#      quiet hours (22:00–07:59 Chicago) and an 18h same-item cooldown —
-#      enforced server-side.
-#
-# Log hygiene: this is a PUBLIC repo — only counts and reason codes are
-# printed, never item titles or content.
+# WHY A GH TWIN STILL EXISTS (even though vercel.json lists this path):
+# the route authenticates with TAI_CRON_SECRET only (not Vercel CRON_SECRET),
+# and production is Fly (tai-web.fly.dev) after VERCEL-EXIT — Vercel Cron
+# would hit lagging heytai.app. Do not "fix" by weakening route auth.
 
 env:
   TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 jobs:
@@ -41,7 +28,7 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
-          URL="${TAI_CRON_URL:-https://heytai.app}"
+          URL="https://tai-web.fly.dev"
           echo "→ POSTing to ${URL}/api/cron/proactive-refresh …"
           RESPONSE=$(curl -sf \
             -X POST \

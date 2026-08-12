@@ -1,18 +1,16 @@
 name: cubs-pregame-push
 
-# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
-#   value that authenticates against heytai.app (copy from the private repo's
-#   GitHub secret, or from Vercel project tai-preview env). The private-repo
-#   twin keeps running on schedule until then — no coverage gap. To activate:
-#   set the secret, then uncomment the `schedule:` block below.
+# Schedule OWNED by combined-tai-http-30min.yml (2026-07-31 consolidation).
+# This file is workflow_dispatch-only — manual fallback / isolation debug.
+# Cubes step runs FIRST in the combined job (10-min pregame window).
+# To revert: re-add `schedule: - cron: '*/30 * * * *'` and remove the
+# cubs step from combined-tai-http-30min.yml.
 
 # Schedule-only ping to a token-gated endpoint. The target route decides whether
 # to act (it sends a pregame push only when first pitch is ~55-65 min out and
 # deduplicates by game). No app code or data lives here.
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 concurrency:
@@ -30,8 +28,9 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
+          # Fly production (VERCEL-EXIT). Do not re-point to lagging heytai.app.
           RESPONSE=$(curl -sf -w "\n%{http_code}" -X POST \
-            "https://heytai.app/api/cron/cubs-pregame-push" \
+            "https://tai-web.fly.dev/api/cron/cubs-pregame-push" \
             -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
             -H "Content-Type: application/json" \
             --max-time 30)
