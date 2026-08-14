@@ -1,19 +1,26 @@
 name: cubs-pregame-push
 
-# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
-#   value that authenticates against heytai.app (copy from the private repo's
-#   GitHub secret, or from Vercel project tai-preview env). The private-repo
-#   twin keeps running on schedule until then — no coverage gap. To activate:
-#   set the secret, then uncomment the `schedule:` block below.
-
 # Schedule-only ping to a token-gated endpoint. The target route decides whether
 # to act (it sends a pregame push only when first pitch is ~55-65 min out and
 # deduplicates by game). No app code or data lives here.
+#
+# HOST: vars.TAI_CRON_URL (https://tai-web.fly.dev). This used to hardcode
+# heytai.app, which is a Cloudflare 301 to usetai.app. `curl -sf` does not follow
+# redirects and -f only fails on >=400, so from 2026-08-07T14:46 onward every
+# single tick got a 301, never reached the app, and still reported success —
+# 6+ days of total failure rendered as ~288 green runs while the Heartbeat Board
+# correctly showed cubs-pregame-push dark since 2026-08-07T14:25.
+#
+# The stale header that used to sit here claimed the schedule was DISABLED
+# pending a secret. It was not disabled — it has been firing every 30 minutes.
 
 on:
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch: {}
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
 
 concurrency:
   group: cubs-pregame-push
@@ -30,8 +37,12 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
-          RESPONSE=$(curl -sf -w "\n%{http_code}" -X POST \
-            "https://heytai.app/api/cron/cubs-pregame-push" \
+          URL="${TAI_CRON_URL:-https://tai-web.fly.dev}"
+          echo "→ POST ${URL}/api/cron/cubs-pregame-push"
+          # -L so a host that 301s is followed rather than silently accepted; no
+          # -f so a non-2xx is inspected here instead of collapsing to exit 22.
+          RESPONSE=$(curl -sL -w "\n%{http_code}" -X POST \
+            "${URL}/api/cron/cubs-pregame-push" \
             -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
             -H "Content-Type: application/json" \
             --max-time 30)
@@ -39,4 +50,7 @@ jobs:
           BODY=$(echo "$RESPONSE" | head -n -1)
           echo "HTTP: $HTTP_CODE"
           echo "Response: $BODY"
-          [ "$HTTP_CODE" = "200" ] || { echo "::warning::returned HTTP $HTTP_CODE"; }
+          # FAIL LOUD. This was `::warning::` and passing, which is exactly how a
+          # totally broken lane stayed green for six days. A tick that cannot
+          # reach the route is a failed tick and must be red.
+          [ "$HTTP_CODE" = "200" ] || { echo "::error::cubs-pregame-push returned HTTP $HTTP_CODE"; exit 1; }

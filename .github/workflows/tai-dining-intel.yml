@@ -5,9 +5,25 @@ name: tai-dining-intel
 # promoted before the dossier pass, then pre-bakes the Restaurant Intelligence
 # PDF for any reservation happening today. 13:50 UTC = 8:50 AM CT, ahead of the
 # lunch window.
+#
+# SCHEDULE DISABLED 2026-08-14 — this lane can no longer succeed, and had been
+# failing every single day since 2026-07-19.
+#
+#   * /api/cron/dining-intel is now a deliberate COST BOUNDARY: the route is a
+#     fail-closed 410 tombstone, kept precisely "so an old manual workflow or
+#     forgotten caller cannot spend". Restaurant Intel is on-demand only, via
+#     Tony's Get Intel / Menu tap (POST /api/dining/intel-pdf). A daily cron
+#     against it is the exact caller that tombstone exists to stop.
+#   * The sync-dining call this workflow makes first is fully redundant:
+#     tai-dining-sync.yml in this repo runs it '10 */2 * * *' (green), and
+#     tony-hub's tai-sync-dining.yml runs it '0 */4 * * *'.
+#
+# So the only thing the schedule bought was one red billed ubuntu-latest run per
+# day. workflow_dispatch is kept — re-enabling is uncommenting two lines, and
+# that call is Tony's, not this workflow's.
 on:
-  schedule:
-    - cron: '50 13 * * *'
+  # schedule:
+  #   - cron: '50 13 * * *'
   workflow_dispatch: {}
 
 env:

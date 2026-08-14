@@ -15,6 +15,15 @@ name: Tai Memory Distill
 #      voids stale seed wordings only — never a correction).
 #   2. Distills durable-fact candidates from the last 24h of conversation,
 #      re-verified against the shared brain before storage.
+#
+# HOST: vars.TAI_CRON_URL (https://tai-web.fly.dev). The run step already read
+# ${TAI_CRON_URL:-https://heytai.app}, but nothing ever wired the repo variable
+# into the environment, so it always took the heytai.app fallback — a Cloudflare
+# 301 — and failed every night. Same one-line omission that was fixed for
+# tai-proactive-refresh in 5bfc726.
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
 
 on:
   schedule:

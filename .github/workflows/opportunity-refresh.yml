@@ -1,16 +1,22 @@
 name: opportunity-refresh
 
-# ⚠ SCHEDULE DISABLED until TAI_CRON_SECRET is set on this repo with the
-#   value that authenticates against heytai.app (copy from the private repo's
-#   GitHub secret, or from Vercel project tai-preview env). The private-repo
-#   twin keeps running on schedule until then — no coverage gap. To activate:
-#   set the secret, then uncomment the `schedule:` block below.
-
 # Schedule-only ping (refreshes the daily focus/opportunity selection server-side).
+#
+# HOST: vars.TAI_CRON_URL (https://tai-web.fly.dev). This used to POST the Vercel
+# preview host directly, which stopped serving the route on 2026-08-07 with the
+# Vercel exit ("Delete all jobs off of Vercel") — every run since has been red and
+# the Heartbeat Board has shown `opportunity-refresh` dark since 2026-08-07T01:46.
+#
+# The stale header that used to sit here claimed the schedule was DISABLED
+# pending a secret. It was not disabled: the `schedule:` block below has been
+# firing daily the whole time. It was aimed at a host that no longer answers.
 on:
   schedule:
     - cron: '0 1 * * *'
   workflow_dispatch: {}
+
+env:
+  TAI_CRON_URL: ${{ vars.TAI_CRON_URL }}
 
 concurrency:
   group: opportunity-refresh
@@ -26,10 +32,13 @@ jobs:
           TAI_CRON_SECRET: ${{ secrets.TAI_CRON_SECRET }}
         run: |
           set -euo pipefail
-          RESPONSE=$(curl -sf -X POST \
+          URL="${TAI_CRON_URL:-https://tai-web.fly.dev}"
+          echo "→ POST ${URL}/api/cron/opportunity-refresh"
+          RESPONSE=$(curl -sfL -X POST \
             -H "Authorization: Bearer ${TAI_CRON_SECRET}" \
             -H "Content-Type: application/json" \
-            "https://tai-preview-liart.vercel.app/api/cron/opportunity-refresh")
+            --max-time 60 \
+            "${URL}/api/cron/opportunity-refresh")
           echo "$RESPONSE" | python3 -m json.tool
           OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',''))")
           { [ "$OK" = "True" ] || [ "$OK" = "true" ]; } || { echo "ERROR: ok=false" >&2; exit 1; }
